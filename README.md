@@ -59,3 +59,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Acknowledgements
 
 - Icons created by Muhamad Ulum from Flaticon
+
+## TODO
+can we add a setting, that the user can enable or not, if enabled the script should automatically 
+detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
+Be careful that we are not introducing a infinite loop.
