@@ -1,0 +1,27 @@
+{
+    "manifest_version": 3,
+    "name": "YouTube Mark As Watched",
+    "version": "1.0",
+    "description": "Adds a button to mark YouTube videos as watched",
+    "permissions": ["activeTab", "scripting"],
+    "action": {
+      "default_title": "Mark as Watched",
+      "default_icon": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+      }
+    },
+    "icons": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "content_scripts": [
+      {
+        "matches": ["*://*.youtube.com/*"],
+        "js": ["content.js"],
+        "css": ["styles.css"]
+      }
+    ]
+  }
