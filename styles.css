@@ -1,0 +1,29 @@
+.mark-watched-btn {
+    opacity: 0.9;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .mark-watched-btn:hover {
+    opacity: 1;
+  }
+  
+  .mark-watched-btn svg {
+    height: 24px;
+    width: 24px;
+    vertical-align: middle;
+  }
+  
+  .mark-watched-btn.success svg path {
+    fill: #00c853 !important;
+  }
+  
+  /* Ensure proper vertical alignment */
+  .ytp-right-controls {
+    display: flex;
+    align-items: center;
+  }
+  
+  
