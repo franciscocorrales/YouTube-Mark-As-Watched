@@ -3,7 +3,7 @@
     "name": "YouTube Mark As Watched",
     "version": "1.0",
     "description": "Adds a button to mark YouTube videos as watched",
-    "permissions": ["activeTab", "scripting"],
+    "permissions": ["activeTab"],
     "action": {
       "default_title": "Mark as Watched",
       "default_icon": {
