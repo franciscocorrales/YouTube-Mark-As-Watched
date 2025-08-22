@@ -1,29 +1,43 @@
+/* Mark as Watched Button Styles */
 .mark-watched-btn {
     opacity: 0.9;
     transition: all 0.2s ease;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
+    background: transparent !important;
+    border: none !important;
+    cursor: pointer !important;
+    padding: 8px !important;
+    margin: 0 4px !important;
   }
   
   .mark-watched-btn:hover {
     opacity: 1;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 2px;
   }
   
   .mark-watched-btn svg {
-    height: 24px;
-    width: 24px;
+    height: 24px !important;
+    width: 24px !important;
     vertical-align: middle;
+    pointer-events: none;
   }
   
   .mark-watched-btn.success svg path {
     fill: #00c853 !important;
   }
   
-  /* Ensure proper vertical alignment */
-  .ytp-right-controls {
-    display: flex;
-    align-items: center;
+  /* Ensure the button is visible in the controls */
+  .ytp-right-controls .mark-watched-btn {
+    display: flex !important;
+    visibility: visible !important;
+  }
+  
+  /* Make sure the button appears with other YouTube controls */
+  .ytp-button.mark-watched-btn {
+    font-size: 0 !important; /* Hide any text content */
   }
   
   

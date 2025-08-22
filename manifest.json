@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "YouTube Mark As Watched",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Adds a button to mark YouTube videos as watched",
     "permissions": [],
     "action": {
