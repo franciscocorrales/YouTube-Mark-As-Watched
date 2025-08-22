@@ -1,6 +1,9 @@
 // Wait for YouTube player to be fully loaded
 function waitForPlayer() {
-  if (document.querySelector('video')) {
+  const video = document.querySelector('video');
+  const controls = document.querySelector('.ytp-chrome-controls') || document.querySelector('.ytp-right-controls');
+  
+  if (video && controls) {
     addMarkAsWatchedButton();
     addVideoEndListener();
   } else {
@@ -15,9 +18,14 @@ function addMarkAsWatchedButton() {
     return;
   }
 
-  // Find YouTube's right controls area
-  const rightControls = document.querySelector('.ytp-right-controls');
-  if (!rightControls) return;
+  // Try multiple selectors for YouTube's right controls area (YouTube changes these frequently)
+  const rightControls = document.querySelector('.ytp-right-controls') || 
+                       document.querySelector('.ytp-chrome-controls .ytp-right-controls') ||
+                       document.querySelector('[class*="ytp-right-controls"]');
+  
+  if (!rightControls) {
+    return;
+  }
 
   // Create button
   const button = document.createElement('button');
@@ -25,16 +33,25 @@ function addMarkAsWatchedButton() {
   button.className = 'ytp-button mark-watched-btn';
   button.title = 'Mark as Watched';
   button.innerHTML = `
-    <svg height="100%" version="1.1" viewBox="0 0 24 24" width="100%">
-      <path d="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2ZM10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z" fill="#FFFFFF"></path>
+    <svg height="100%" version="1.1" viewBox="0 0 36 36" width="100%">
+      <use class="ytp-svg-shadow" xlink:href="#mark-watched-path"></use>
+      <defs>
+        <path id="mark-watched-path" d="M18,2C9.48,2 2,9.48 2,18C2,26.52 9.48,34 18,34C26.52,34 34,26.52 34,18C34,9.48 26.52,2 18,2ZM15,26L7.5,18L9.91,15.59L15,20.67L26.59,9.08L29,11.5L15,26Z" fill="#FFFFFF"></path>
+      </defs>
+      <path d="M18,2C9.48,2 2,9.48 2,18C2,26.52 9.48,34 18,34C26.52,34 34,26.52 34,18C34,9.48 26.52,2 18,2ZM15,26L7.5,18L9.91,15.59L15,20.67L26.59,9.08L29,11.5L15,26Z" fill="#FFFFFF"></path>
     </svg>
   `;
 
   // Add click event listener
   button.addEventListener('click', markVideoAsWatched);
 
-  // Insert button into player controls
-  rightControls.insertBefore(button, rightControls.firstChild);
+  // Insert button into player controls (try different insertion methods)
+  try {
+    rightControls.insertBefore(button, rightControls.firstChild);
+  } catch (error) {
+    // Fallback: append to the end
+    rightControls.appendChild(button);
+  }
 }
 
 // Track if we're currently marking the video
@@ -84,7 +101,6 @@ function markVideoAsWatched() {
           setTimeout(() => button.classList.remove('success'), 2000);
         }
 
-        console.log('✅ Video marked as watched successfully!');
         isMarkingVideo = false;
       }, 500);
     }, 1000);
@@ -98,14 +114,22 @@ function markVideoAsWatched() {
 // Add listener for video end
 function addVideoEndListener() {
   const videoPlayer = document.querySelector('video');
-  if (!videoPlayer) return;
+  if (!videoPlayer) {
+    return;
+  }
 
-  videoPlayer.addEventListener('ended', () => {
-    if (!isMarkingVideo) {
-      console.log('Video ended naturally, marking as watched...');
-      markVideoAsWatched();
-    }
-  });
+  // Remove any existing listeners to avoid duplicates
+  videoPlayer.removeEventListener('ended', handleVideoEnd);
+  
+  // Add the listener
+  videoPlayer.addEventListener('ended', handleVideoEnd);
+}
+
+// Separate function to handle video end
+function handleVideoEnd() {
+  if (!isMarkingVideo) {
+    markVideoAsWatched();
+  }
 }
 
 // Start the process when YouTube page loads
@@ -113,9 +137,41 @@ waitForPlayer();
 
 // Re-add button and listeners when navigating between videos without page reload
 let lastUrl = location.href;
-new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    setTimeout(waitForPlayer, 1500); // Wait for player to load after navigation
+const observer = new MutationObserver(() => {
+  const currentUrl = location.href;
+  if (currentUrl !== lastUrl) {
+    lastUrl = currentUrl;
+    
+    // Remove existing button if any
+    const existingButton = document.getElementById('mark-watched-btn');
+    if (existingButton) {
+      existingButton.remove();
+    }
+    
+    // Wait a bit longer for the new page to load
+    setTimeout(waitForPlayer, 2000);
   }
-}).observe(document, { subtree: true, childList: true });
+  
+  // Also check if controls are added dynamically
+  if (!document.getElementById('mark-watched-btn')) {
+    const controls = document.querySelector('.ytp-chrome-controls .ytp-right-controls');
+    if (controls && document.querySelector('video')) {
+      setTimeout(() => {
+        addMarkAsWatchedButton();
+        addVideoEndListener();
+      }, 500);
+    }
+  }
+});
+
+// Observe changes to the entire document
+observer.observe(document, { 
+  subtree: true, 
+  childList: true,
+  attributes: false // We don't need to watch for attribute changes
+});
+
+// Also listen for YouTube's specific navigation events
+document.addEventListener('yt-navigate-finish', () => {
+  setTimeout(waitForPlayer, 1000);
+});
