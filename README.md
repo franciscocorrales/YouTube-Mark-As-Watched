@@ -10,6 +10,7 @@ https://chromewebstore.google.com/detail/youtube-mark-as-watched/pccgjnpmgoibggo
 ## The Problem
 
 Many YouTube users, including myself, have experienced this frustrating issue:
+
 1. You watch a video to completion in your web browser
 2. The red progress bar should fill completely, marking the video as watched
 3. When you return later, the progress bar is incomplete, suggesting you haven't finished the video
@@ -19,6 +20,7 @@ This occurs across multiple browsers (Chrome, Firefox, Brave) and operating syst
 ## The Solution
 
 This extension adds a simple "Mark as Watched" button to YouTube's video player controls. When clicked, it:
+
 1. Programmatically seeks to the end of the video
 2. Briefly plays the last fraction of a second
 3. Ensures YouTube's servers register the video as completely watched
@@ -27,11 +29,13 @@ This extension adds a simple "Mark as Watched" button to YouTube's video player 
 ## Installation
 
 ### From Chrome Web Store
+
 1. Visit the extension page on the Chrome Web Store
 2. Click "Add to Chrome"
 3. Confirm the installation
 
 ### Manual Installation
+
 1. Download or clone this repository
 2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable "Developer mode" (toggle in the top-right corner)
@@ -64,6 +68,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Icons created by Muhamad Ulum from Flaticon
 
 ## TODO
+
 Can we add a setting, that the user can enable or not, if enabled the script should automatically 
 detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
 
