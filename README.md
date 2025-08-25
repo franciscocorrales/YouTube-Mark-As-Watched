@@ -45,7 +45,7 @@ This extension adds a simple "Mark as Watched" button to YouTube's video player 
 3. Click the button to mark the video as watched
 4. The button will briefly turn green to indicate success
 
-![element location](icons/element-location.png?raw=true "element location")
+![element location](icons/button-location.jpg?raw=true "button location")
 
 ## Technical Details
 
@@ -64,6 +64,9 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Icons created by Muhamad Ulum from Flaticon
 
 ## TODO
-can we add a setting, that the user can enable or not, if enabled the script should automatically 
+Can we add a setting, that the user can enable or not, if enabled the script should automatically 
 detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
+
 Be careful that we are not introducing a infinite loop.
+
+Be able to Mark as Watched in the home, overview and other pages.
