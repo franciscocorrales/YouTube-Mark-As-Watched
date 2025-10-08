@@ -54,9 +54,6 @@ function addMarkAsWatchedButton() {
   }
 }
 
-// Track if we're currently marking the video
-let isMarkingVideo = false;
-
 // Function to mark video as watched
 function markVideoAsWatched() {
   if (isMarkingVideo) return; // Prevent recursive calls
@@ -170,6 +167,9 @@ observer.observe(document, {
   childList: true,
   attributes: false // We don't need to watch for attribute changes
 });
+
+// Track if we're currently marking the video
+let isMarkingVideo = false;
 
 // Also listen for YouTube's specific navigation events
 document.addEventListener('yt-navigate-finish', () => {
