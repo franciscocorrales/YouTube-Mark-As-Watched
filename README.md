@@ -55,6 +55,14 @@ This extension adds a simple "Mark as Watched" button to YouTube's video player 
 
 The extension works by manipulating the video element's currentTime property to seek to the end of the video and triggering playback briefly to ensure YouTube's tracking mechanisms register the view as complete.
 
+## Packaging
+
+To create a release ready for the Chrome Web Store, run the following command in the project root:
+
+```bash
+zip -r YouTubeMarkAsWatched.zip . -x "*.git*"
+```
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.
