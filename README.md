@@ -4,8 +4,8 @@
 
 This Chrome extension addresses a persistent bug in YouTube's web interface where videos don't consistently get marked as "watched" in your watch history, even after viewing them completely. While this feature works reliably on mobile and TV apps, the web version often fails to update the red progress bar to show completion status.
 
-Get it from Chrome Store: 
-https://chromewebstore.google.com/detail/youtube-mark-as-watched/pccgjnpmgoibggokgmciimgoomofocbd
+Get it from Chrome Store:
+<https://chromewebstore.google.com/detail/youtube-mark-as-watched/pccgjnpmgoibggokgmciimgoomofocbd>
 
 ## The Problem
 
@@ -77,8 +77,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## TODO
 
-Can we add a setting, that the user can enable or not, if enabled the script should automatically 
-detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
+Can we add a setting, that the user can enable or not, if enabled the script should automatically detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
 
 Be careful that we are not introducing a infinite loop.
 
