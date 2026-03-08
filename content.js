@@ -9,10 +9,29 @@ let settings = { ...DEFAULT_SETTINGS };
 let isMarkingVideo = false;
 let playlistDebounceTimer = null;
 let lastUrl = location.href;
+const PLAYLIST_STATS_PANEL_ID = 'ytmaw-playlist-stats-panel';
+const PLAYLIST_DEBUG_LOGS = true;
+let lastPlaylistStatsKey = '';
+let lastPlaylistHostMissLogAt = 0;
 
 // Returns whether a given feature flag is enabled in active settings.
 function isFeatureEnabled(key) {
   return !!settings[key];
+}
+
+// Returns true when the current URL is a YouTube playlist page.
+function isPlaylistPageUrl() {
+  return location.href.includes('/playlist?list=');
+}
+
+// Emits playlist-specific debug logs when debugging is enabled.
+function logPlaylistDebug(message, extra = null) {
+  if (!PLAYLIST_DEBUG_LOGS) return;
+  if (extra !== null) {
+    console.log(`[YouTube Mark As Watched][Playlist Debug] ${message}`, extra);
+    return;
+  }
+  console.log(`[YouTube Mark As Watched][Playlist Debug] ${message}`);
 }
 
 // Loads persisted user settings from chrome.storage and merges with defaults.
@@ -65,13 +84,17 @@ function applyFeatureToggles() {
     checkAndRedirectSearch();
   }
 
-  if (isFeatureEnabled('enablePlaylistStats') && location.href.includes('/playlist?list=')) {
+  if (isFeatureEnabled('enablePlaylistStats') && isPlaylistPageUrl()) {
     triggerPlaylistStats();
   }
 
   if (!isFeatureEnabled('enablePlaylistStats') && playlistDebounceTimer) {
     clearTimeout(playlistDebounceTimer);
     playlistDebounceTimer = null;
+  }
+
+  if (!isFeatureEnabled('enablePlaylistStats')) {
+    removePlaylistStatsPanel();
   }
 }
 
@@ -329,11 +352,11 @@ function checkAndRedirectSearch() {
 
 // Computes playlist completion metrics from visible playlist items.
 function calculatePlaylistStats() {
-  if (!isFeatureEnabled('enablePlaylistStats')) return;
-  if (!location.href.includes('/playlist?list=')) return;
+  if (!isFeatureEnabled('enablePlaylistStats')) return null;
+  if (!isPlaylistPageUrl()) return null;
 
   const videoItems = document.querySelectorAll('ytd-playlist-video-renderer');
-  if (videoItems.length === 0) return;
+  if (videoItems.length === 0) return null;
 
   let totalVideos = 0;
   let totalDurationSec = 0;
@@ -375,11 +398,17 @@ function calculatePlaylistStats() {
     watchedDurationSec += duration * percentage;
   });
 
-  if (totalVideos > 0) {
-    const totalWatchedPercentage = totalDurationSec > 0 ? (watchedDurationSec / totalDurationSec) * 100 : 0;
+  if (totalVideos === 0) return null;
 
-    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${totalVideos}\n    - Total Duration: ${formatTime(totalDurationSec)}\n    - Watched Duration: ${formatTime(watchedDurationSec)}\n    - Playlist Completion: ${totalWatchedPercentage.toFixed(1)}%`);
-  }
+  const totalWatchedPercentage = totalDurationSec > 0 ? (watchedDurationSec / totalDurationSec) * 100 : 0;
+  const stats = {
+    totalVideos: totalVideos,
+    totalDurationSec: totalDurationSec,
+    watchedDurationSec: watchedDurationSec,
+    totalWatchedPercentage: totalWatchedPercentage
+  };
+
+  return stats;
 }
 
 // Parses HH:MM:SS or MM:SS into total seconds.
@@ -408,13 +437,131 @@ function formatTime(seconds) {
 function triggerPlaylistStats() {
   if (!isFeatureEnabled('enablePlaylistStats')) return;
   if (playlistDebounceTimer) clearTimeout(playlistDebounceTimer);
-  playlistDebounceTimer = setTimeout(calculatePlaylistStats, 2000);
+  logPlaylistDebug('Scheduling playlist stats refresh');
+  playlistDebounceTimer = setTimeout(updatePlaylistStatsUI, 2000);
 }
 
-const observer = new MutationObserver(() => {
+// Finds the best host element inside the playlist header for the custom stats panel.
+function findPlaylistStatsHost() {
+  const legacyHeader = document.querySelector('ytd-playlist-header-renderer');
+  if (legacyHeader) {
+    const legacyHost = legacyHeader.querySelector('.metadata-text-wrapper') ||
+      legacyHeader.querySelector('.metadata-wrapper') ||
+      legacyHeader.querySelector('.immersive-header-content');
+    if (legacyHost) return legacyHost;
+  }
+
+  const modernHeader = document.querySelector('yt-page-header-renderer, yt-page-header-view-model');
+  if (modernHeader) {
+    const modernHost = modernHeader.querySelector('.yt-page-header-view-model__page-header-headline-info') ||
+      modernHeader.querySelector('.yt-page-header-view-model__page-header-headline') ||
+      modernHeader.querySelector('.yt-page-header-view-model__page-header-content') ||
+      modernHeader.querySelector('.yt-page-header-view-model__scroll-container');
+    if (modernHost) return modernHost;
+    return modernHeader;
+  }
+
+  const fallbackHost = document.querySelector('ytd-browse #primary') || null;
+  if (!fallbackHost) {
+    const now = Date.now();
+    if (now - lastPlaylistHostMissLogAt > 5000) {
+      logPlaylistDebug('Could not find a playlist header host (legacy + modern selectors missed)');
+      lastPlaylistHostMissLogAt = now;
+    }
+  }
+  return fallbackHost;
+}
+
+// Removes the custom playlist stats panel if it exists.
+function removePlaylistStatsPanel() {
+  const existingPanel = document.getElementById(PLAYLIST_STATS_PANEL_ID);
+  if (existingPanel) existingPanel.remove();
+  lastPlaylistStatsKey = '';
+}
+
+// Produces a compact fingerprint so unchanged stats are not repeatedly logged.
+function buildPlaylistStatsKey(stats) {
+  return `${stats.totalVideos}|${stats.totalDurationSec}|${Math.round(stats.watchedDurationSec)}|${stats.totalWatchedPercentage.toFixed(2)}`;
+}
+
+// Renders or updates the playlist stats panel in the playlist header UI.
+function renderPlaylistStatsPanel(stats) {
+  const host = findPlaylistStatsHost();
+  if (!host) return;
+
+  let panel = document.getElementById(PLAYLIST_STATS_PANEL_ID);
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = PLAYLIST_STATS_PANEL_ID;
+    panel.className = 'ytmaw-playlist-stats';
+  }
+  if (panel.parentElement !== host) host.appendChild(panel);
+
+  const completionText = `${stats.totalWatchedPercentage.toFixed(1)}%`;
+  panel.innerHTML = `
+    <div class="ytmaw-playlist-stats-title">Playlist Summary</div>
+    <div class="ytmaw-playlist-stats-grid">
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Videos</span><span class="ytmaw-value">${stats.totalVideos}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Completion</span><span class="ytmaw-value">${completionText}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Watched</span><span class="ytmaw-value">${formatTime(stats.watchedDurationSec)}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Total</span><span class="ytmaw-value">${formatTime(stats.totalDurationSec)}</span></div>
+    </div>
+  `;
+}
+
+// Calculates playlist stats and syncs the visible playlist panel.
+function updatePlaylistStatsUI() {
+  if (!isFeatureEnabled('enablePlaylistStats')) {
+    removePlaylistStatsPanel();
+    return;
+  }
+
+  if (!isPlaylistPageUrl()) {
+    removePlaylistStatsPanel();
+    return;
+  }
+
+  const stats = calculatePlaylistStats();
+  if (!stats) {
+    logPlaylistDebug('No playlist stats available yet (playlist items may still be loading)');
+    return;
+  }
+
+  const statsKey = buildPlaylistStatsKey(stats);
+  if (statsKey !== lastPlaylistStatsKey) {
+    lastPlaylistStatsKey = statsKey;
+    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${stats.totalVideos}\n    - Total Duration: ${formatTime(stats.totalDurationSec)}\n    - Watched Duration: ${formatTime(stats.watchedDurationSec)}\n    - Playlist Completion: ${stats.totalWatchedPercentage.toFixed(1)}%`);
+  } else {
+    logPlaylistDebug('Stats unchanged, skipping duplicate console summary');
+  }
+
+  renderPlaylistStatsPanel(stats);
+}
+
+// Checks whether the latest DOM mutations are relevant to playlist stats updates.
+function hasRelevantPlaylistMutation(mutations) {
+  for (const mutation of mutations) {
+    if (mutation.type !== 'childList') continue;
+    for (const node of mutation.addedNodes) {
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      const element = node;
+      if (element.matches?.('ytd-playlist-video-renderer, ytd-playlist-header-renderer, yt-page-header-renderer, yt-page-header-view-model')) {
+        return true;
+      }
+      if (element.querySelector?.('ytd-playlist-video-renderer, ytd-playlist-header-renderer, yt-page-header-renderer, yt-page-header-view-model')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Watches YouTube DOM mutations to keep injected UI/features in sync.
+const observer = new MutationObserver((mutations) => {
   const currentUrl = location.href;
 
-  if (isFeatureEnabled('enablePlaylistStats') && currentUrl.includes('/playlist?list=')) {
+  if (isFeatureEnabled('enablePlaylistStats') && isPlaylistPageUrl() && hasRelevantPlaylistMutation(mutations)) {
+    logPlaylistDebug('Relevant playlist mutation detected, refreshing stats');
     triggerPlaylistStats();
   }
 
@@ -428,6 +575,12 @@ const observer = new MutationObserver(() => {
     if (isFeatureEnabled('enableSearchBeforeYear')) {
       setupSearchInterception();
       checkAndRedirectSearch();
+    }
+
+    if (!isPlaylistPageUrl()) {
+      removePlaylistStatsPanel();
+    } else if (isFeatureEnabled('enablePlaylistStats')) {
+      triggerPlaylistStats();
     }
   }
 
@@ -452,6 +605,7 @@ observer.observe(document, {
   attributes: false
 });
 
+// Handles YouTube SPA navigation events to re-apply features on route change.
 document.addEventListener('yt-navigate-finish', () => {
   setTimeout(waitForPlayer, 1000);
 
@@ -460,11 +614,13 @@ document.addEventListener('yt-navigate-finish', () => {
     checkAndRedirectSearch();
   }
 
-  if (isFeatureEnabled('enablePlaylistStats') && location.href.includes('/playlist?list=')) {
+  if (isFeatureEnabled('enablePlaylistStats') && isPlaylistPageUrl()) {
+    logPlaylistDebug('yt-navigate-finish on playlist page, refreshing stats');
     triggerPlaylistStats();
   }
 });
 
+// Applies live setting changes pushed from the options page.
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'sync') return;
 
@@ -481,6 +637,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
+// Initializes content features after loading persisted settings.
 (async function init() {
   await loadSettings();
   applyFeatureToggles();
