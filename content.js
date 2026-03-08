@@ -1,33 +1,116 @@
-// Wait for YouTube player to be fully loaded
-function waitForPlayer() {
-  const video = document.querySelector('video');
-  const controls = document.querySelector('.ytp-chrome-controls') || document.querySelector('.ytp-right-controls');
-  
-  if (video && controls) {
-    addMarkAsWatchedButton();
-    addVideoEndListener();
+const DEFAULT_SETTINGS = {
+  enableMarkAsWatchedButton: true,
+  enableAutoMarkOnVideoEnd: true,
+  enablePlaylistStats: true,
+  enableSearchBeforeYear: false
+};
+
+let settings = { ...DEFAULT_SETTINGS };
+let isMarkingVideo = false;
+let playlistDebounceTimer = null;
+let lastUrl = location.href;
+
+function isFeatureEnabled(key) {
+  return !!settings[key];
+}
+
+function loadSettings() {
+  return new Promise((resolve) => {
+    if (!chrome?.storage?.sync) {
+      resolve();
+      return;
+    }
+
+    chrome.storage.sync.get(DEFAULT_SETTINGS, (stored) => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to load settings:', chrome.runtime.lastError);
+        resolve();
+        return;
+      }
+
+      settings = { ...DEFAULT_SETTINGS, ...stored };
+      resolve();
+    });
+  });
+}
+
+function removeMarkAsWatchedButton() {
+  const button = document.getElementById('mark-watched-btn');
+  if (button) button.remove();
+}
+
+function removeVideoEndListener() {
+  const videoPlayer = document.querySelector('video');
+  if (!videoPlayer) return;
+  videoPlayer.removeEventListener('ended', handleVideoEnd);
+}
+
+function applyFeatureToggles() {
+  const playerFeatureEnabled = isFeatureEnabled('enableMarkAsWatchedButton') || isFeatureEnabled('enableAutoMarkOnVideoEnd');
+
+  if (playerFeatureEnabled) {
+    waitForPlayer();
   } else {
-    setTimeout(waitForPlayer, 1000);
+    removeMarkAsWatchedButton();
+    removeVideoEndListener();
+  }
+
+  if (isFeatureEnabled('enableSearchBeforeYear')) {
+    setupSearchInterception();
+    checkAndRedirectSearch();
+  }
+
+  if (isFeatureEnabled('enablePlaylistStats') && location.href.includes('/playlist?list=')) {
+    triggerPlaylistStats();
+  }
+
+  if (!isFeatureEnabled('enablePlaylistStats') && playlistDebounceTimer) {
+    clearTimeout(playlistDebounceTimer);
+    playlistDebounceTimer = null;
   }
 }
 
-// Add custom button to YouTube interface
+function waitForPlayer() {
+  const needsPlayer = isFeatureEnabled('enableMarkAsWatchedButton') || isFeatureEnabled('enableAutoMarkOnVideoEnd');
+  if (!needsPlayer) return;
+
+  const video = document.querySelector('video');
+  const controls = document.querySelector('.ytp-chrome-controls') || document.querySelector('.ytp-right-controls');
+
+  if (video) {
+    if (isFeatureEnabled('enableAutoMarkOnVideoEnd')) {
+      addVideoEndListener();
+    } else {
+      removeVideoEndListener();
+    }
+  }
+
+  if (isFeatureEnabled('enableMarkAsWatchedButton')) {
+    if (video && controls) {
+      addMarkAsWatchedButton();
+    } else {
+      setTimeout(waitForPlayer, 1000);
+    }
+  } else {
+    removeMarkAsWatchedButton();
+  }
+}
+
 function addMarkAsWatchedButton() {
-  // Check if button already exists
+  if (!isFeatureEnabled('enableMarkAsWatchedButton')) return;
+
   if (document.getElementById('mark-watched-btn')) {
     return;
   }
 
-  // Try multiple selectors for YouTube's right controls area (YouTube changes these frequently)
-  const rightControls = document.querySelector('.ytp-right-controls') || 
-                       document.querySelector('.ytp-chrome-controls .ytp-right-controls') ||
-                       document.querySelector('[class*="ytp-right-controls"]');
-  
+  const rightControls = document.querySelector('.ytp-right-controls') ||
+    document.querySelector('.ytp-chrome-controls .ytp-right-controls') ||
+    document.querySelector('[class*="ytp-right-controls"]');
+
   if (!rightControls) {
     return;
   }
 
-  // Create button
   const button = document.createElement('button');
   button.id = 'mark-watched-btn';
   button.className = 'ytp-button mark-watched-btn';
@@ -42,21 +125,17 @@ function addMarkAsWatchedButton() {
     </svg>
   `;
 
-  // Add click event listener
   button.addEventListener('click', markVideoAsWatched);
 
-  // Insert button into player controls (try different insertion methods)
   try {
     rightControls.insertBefore(button, rightControls.firstChild);
   } catch (error) {
-    // Fallback: append to the end
     rightControls.appendChild(button);
   }
 }
 
-// Function to mark video as watched
 function markVideoAsWatched() {
-  if (isMarkingVideo) return; // Prevent recursive calls
+  if (isMarkingVideo) return;
 
   try {
     isMarkingVideo = true;
@@ -76,22 +155,15 @@ function markVideoAsWatched() {
       return;
     }
 
-    // Set current time to end of video (leaving 0.1s to avoid potential issues)
     videoPlayer.currentTime = videoDuration - 0.1;
-
-    // Force playback to ensure the progress is registered
     videoPlayer.play();
 
-    // Add a small delay then pause the video
     setTimeout(() => {
-      // Ensure we're at the very end
       videoPlayer.currentTime = videoDuration - 0.01;
 
-      // Optional: pause after reaching the end
       setTimeout(() => {
         videoPlayer.pause();
 
-        // Show success feedback
         const button = document.getElementById('mark-watched-btn');
         if (button) {
           button.classList.add('success');
@@ -101,100 +173,147 @@ function markVideoAsWatched() {
         isMarkingVideo = false;
       }, 500);
     }, 1000);
-
   } catch (error) {
     console.error('Error marking video as watched:', error);
     isMarkingVideo = false;
   }
 }
 
-// Add listener for video end
 function addVideoEndListener() {
+  if (!isFeatureEnabled('enableAutoMarkOnVideoEnd')) return;
+
   const videoPlayer = document.querySelector('video');
   if (!videoPlayer) {
     return;
   }
 
-  // Remove any existing listeners to avoid duplicates
   videoPlayer.removeEventListener('ended', handleVideoEnd);
-  
-  // Add the listener
   videoPlayer.addEventListener('ended', handleVideoEnd);
 }
 
-// Separate function to handle video end
 function handleVideoEnd() {
+  if (!isFeatureEnabled('enableAutoMarkOnVideoEnd')) return;
   if (!isMarkingVideo) {
     markVideoAsWatched();
   }
 }
 
-// Start the process when YouTube page loads
-waitForPlayer();
+function getBeforeFilter() {
+  return `before:${new Date().getFullYear() + 1}`;
+}
 
-// Re-add button and listeners when navigating between videos without page reload
-let lastUrl = location.href;
-const observer = new MutationObserver(() => {
+function maybePrefixSearchInput(searchInput) {
+  if (!isFeatureEnabled('enableSearchBeforeYear')) return;
+  if (!searchInput || !searchInput.value) return;
+
+  const originalQuery = searchInput.value.trim();
+  const beforeFilter = getBeforeFilter();
+  if (!originalQuery || originalQuery.includes(beforeFilter)) return;
+
+  searchInput.value = `${beforeFilter} ${originalQuery}`;
+}
+
+function setupSearchFormInterception(searchForm) {
+  if (!searchForm || searchForm._markWatchedSearchIntercepted) return;
+  searchForm._markWatchedSearchIntercepted = true;
+
+  const originalSubmit = searchForm.submit;
+  searchForm.submit = function () {
+    const searchInput = searchForm.querySelector('input[name="search_query"]') ||
+      searchForm.querySelector('#search') ||
+      searchForm.querySelector('input[type="search"]');
+
+    maybePrefixSearchInput(searchInput);
+    originalSubmit.call(searchForm);
+  };
+
+  searchForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const searchInput = searchForm.querySelector('input[name="search_query"]') ||
+      searchForm.querySelector('#search') ||
+      searchForm.querySelector('input[type="search"]');
+
+    maybePrefixSearchInput(searchInput);
+    originalSubmit.call(searchForm);
+  }, true);
+}
+
+function setupSearchInputInterception(searchInput) {
+  if (!searchInput || searchInput._markWatchedSearchIntercepted) return;
+  searchInput._markWatchedSearchIntercepted = true;
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      maybePrefixSearchInput(searchInput);
+    }
+  }, true);
+}
+
+function setupSearchButtonInterception(searchButton) {
+  if (!searchButton || searchButton._markWatchedSearchIntercepted) return;
+  searchButton._markWatchedSearchIntercepted = true;
+
+  searchButton.addEventListener('click', () => {
+    const searchForm = searchButton.closest('form') || document.querySelector('form[action="/results"]');
+    const searchInput = searchForm?.querySelector('input[name="search_query"]') ||
+      document.querySelector('#search') ||
+      document.querySelector('input[name="search_query"]');
+
+    maybePrefixSearchInput(searchInput);
+  }, true);
+}
+
+function setupSearchInterception() {
+  const searchForm = document.querySelector('form[action="/results"]') ||
+    document.querySelector('#search-form') ||
+    document.querySelector('form[action*="search"]');
+
+  const searchInput = document.querySelector('input[name="search_query"]') ||
+    document.querySelector('#search') ||
+    document.querySelector('input[type="search"]');
+
+  const searchButton = document.querySelector('#search-icon-legacy') ||
+    document.querySelector('button[aria-label*="Search"]') ||
+    document.querySelector('#search-button');
+
+  if (searchForm) setupSearchFormInterception(searchForm);
+  if (searchInput) setupSearchInputInterception(searchInput);
+  if (searchButton) setupSearchButtonInterception(searchButton);
+}
+
+function checkAndRedirectSearch() {
+  if (!isFeatureEnabled('enableSearchBeforeYear')) return false;
+  if (!location.href.includes('/results?search_query=')) return false;
+
+  const beforeYear = new Date().getFullYear() + 1;
+  const beforeFilter = `before:${beforeYear}`;
   const currentUrl = location.href;
-  
-  // Check if we are on a playlist page and trigger stats calculation
-  if (currentUrl.includes('/playlist?list=')) {
-    triggerPlaylistStats();
+
+  if (currentUrl.includes(`before%3A${beforeYear}`) || currentUrl.includes(beforeFilter)) {
+    return false;
   }
 
-  if (currentUrl !== lastUrl) {
-    lastUrl = currentUrl;
-    
-    // Remove existing button if any
-    const existingButton = document.getElementById('mark-watched-btn');
-    if (existingButton) {
-      existingButton.remove();
+  try {
+    const url = new URL(currentUrl);
+    const searchQuery = url.searchParams.get('search_query');
+    if (searchQuery && !searchQuery.includes(beforeFilter)) {
+      url.searchParams.set('search_query', `${beforeFilter} ${searchQuery}`);
+      window.location.replace(url.toString());
+      return true;
     }
-    
-    // Wait a bit longer for the new page to load
-    setTimeout(waitForPlayer, 2000);
+  } catch (error) {
+    console.error('Error processing search URL:', error);
   }
-  
-  // Also check if controls are added dynamically
-  if (!document.getElementById('mark-watched-btn')) {
-    const controls = document.querySelector('.ytp-chrome-controls .ytp-right-controls');
-    if (controls && document.querySelector('video')) {
-      setTimeout(() => {
-        addMarkAsWatchedButton();
-        addVideoEndListener();
-      }, 500);
-    }
-  }
-});
 
-// Observe changes to the entire document
-observer.observe(document, { 
-  subtree: true, 
-  childList: true,
-  attributes: false // We don't need to watch for attribute changes
-});
-
-// Track if we're currently marking the video
-let isMarkingVideo = false;
-
-// Also listen for YouTube's specific navigation events
-document.addEventListener('yt-navigate-finish', () => {
-  setTimeout(waitForPlayer, 1000);
-  if (location.href.includes('/playlist?list=')) {
-    triggerPlaylistStats();
-  }
-});
-
-
-// --- Playlist Statistics Feature ---
-
-let playlistDebounceTimer = null;
+  return false;
+}
 
 function calculatePlaylistStats() {
-  // Only run on playlist pages
+  if (!isFeatureEnabled('enablePlaylistStats')) return;
   if (!location.href.includes('/playlist?list=')) return;
 
-  // Use the selector provided by user for video items in a playlist
   const videoItems = document.querySelectorAll('ytd-playlist-video-renderer');
   if (videoItems.length === 0) return;
 
@@ -202,15 +321,12 @@ function calculatePlaylistStats() {
   let totalDurationSec = 0;
   let watchedDurationSec = 0;
 
-  videoItems.forEach(item => {
-    // Determine duration
-    // Try newer badge shape selector first, then fallback
+  videoItems.forEach((item) => {
     let timeText = '';
     const badgeText = item.querySelector('.yt-badge-shape__text');
     if (badgeText) {
       timeText = badgeText.textContent.trim();
     } else {
-      // Fallback for older layouts or different views
       const oldTime = item.querySelector('ytd-thumbnail-overlay-time-status-renderer span#text');
       if (oldTime) timeText = oldTime.textContent.trim();
     }
@@ -223,18 +339,14 @@ function calculatePlaylistStats() {
     totalVideos++;
     totalDurationSec += duration;
 
-    // Determine watched percentage
     let percentage = 0;
-    
-    // Check for "WATCHED" text overlay
+
     const overlay = item.querySelector('ytd-thumbnail-overlay-playback-status-renderer yt-formatted-string');
     if (overlay && overlay.textContent.trim() === 'WATCHED') {
-      percentage = 1.0;
+      percentage = 1;
     } else {
-      // Check for progress bar style width
       const progress = item.querySelector('ytd-thumbnail-overlay-resume-playback-renderer #progress');
       if (progress && progress.style.width) {
-        // defined as '100%' or '50%'
         const widthVal = parseFloat(progress.style.width);
         if (!isNaN(widthVal)) {
           percentage = widthVal / 100;
@@ -242,17 +354,13 @@ function calculatePlaylistStats() {
       }
     }
 
-    watchedDurationSec += (duration * percentage);
+    watchedDurationSec += duration * percentage;
   });
 
   if (totalVideos > 0) {
-    const totalWatchedPercentage = (totalDurationSec > 0) ? (watchedDurationSec / totalDurationSec) * 100 : 0;
-    
-    console.log(`[YouTube Mark As Watched] Playlist Stats:
-    - Videos: ${totalVideos}
-    - Total Duration: ${formatTime(totalDurationSec)}
-    - Watched Duration: ${formatTime(watchedDurationSec)}
-    - Playlist Completion: ${totalWatchedPercentage.toFixed(1)}%`);
+    const totalWatchedPercentage = totalDurationSec > 0 ? (watchedDurationSec / totalDurationSec) * 100 : 0;
+
+    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${totalVideos}\n    - Total Duration: ${formatTime(totalDurationSec)}\n    - Watched Duration: ${formatTime(watchedDurationSec)}\n    - Playlist Completion: ${totalWatchedPercentage.toFixed(1)}%`);
   }
 }
 
@@ -277,6 +385,82 @@ function formatTime(seconds) {
 }
 
 function triggerPlaylistStats() {
+  if (!isFeatureEnabled('enablePlaylistStats')) return;
   if (playlistDebounceTimer) clearTimeout(playlistDebounceTimer);
-  playlistDebounceTimer = setTimeout(calculatePlaylistStats, 2000); // Wait for rendering to settle
+  playlistDebounceTimer = setTimeout(calculatePlaylistStats, 2000);
 }
+
+const observer = new MutationObserver(() => {
+  const currentUrl = location.href;
+
+  if (isFeatureEnabled('enablePlaylistStats') && currentUrl.includes('/playlist?list=')) {
+    triggerPlaylistStats();
+  }
+
+  if (currentUrl !== lastUrl) {
+    lastUrl = currentUrl;
+
+    removeMarkAsWatchedButton();
+
+    setTimeout(waitForPlayer, 2000);
+
+    if (isFeatureEnabled('enableSearchBeforeYear')) {
+      setupSearchInterception();
+      checkAndRedirectSearch();
+    }
+  }
+
+  if (isFeatureEnabled('enableMarkAsWatchedButton') && !document.getElementById('mark-watched-btn')) {
+    const controls = document.querySelector('.ytp-chrome-controls .ytp-right-controls');
+    if (controls && document.querySelector('video')) {
+      setTimeout(() => {
+        addMarkAsWatchedButton();
+        addVideoEndListener();
+      }, 500);
+    }
+  }
+
+  if (isFeatureEnabled('enableAutoMarkOnVideoEnd') && document.querySelector('video')) {
+    addVideoEndListener();
+  }
+});
+
+observer.observe(document, {
+  subtree: true,
+  childList: true,
+  attributes: false
+});
+
+document.addEventListener('yt-navigate-finish', () => {
+  setTimeout(waitForPlayer, 1000);
+
+  if (isFeatureEnabled('enableSearchBeforeYear')) {
+    setupSearchInterception();
+    checkAndRedirectSearch();
+  }
+
+  if (isFeatureEnabled('enablePlaylistStats') && location.href.includes('/playlist?list=')) {
+    triggerPlaylistStats();
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'sync') return;
+
+  let needsApply = false;
+  Object.keys(DEFAULT_SETTINGS).forEach((key) => {
+    if (changes[key]) {
+      settings[key] = changes[key].newValue;
+      needsApply = true;
+    }
+  });
+
+  if (needsApply) {
+    applyFeatureToggles();
+  }
+});
+
+(async function init() {
+  await loadSettings();
+  applyFeatureToggles();
+})();

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Mark As Watched - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="container">
+    <h1>YouTube Mark As Watched</h1>
+    <p class="subtitle">Feature settings</p>
+
+    <section class="card">
+      <label class="setting" for="enableMarkAsWatchedButton">
+        <input type="checkbox" id="enableMarkAsWatchedButton">
+        <span>Add "Mark as Watched" player button</span>
+      </label>
+
+      <label class="setting" for="enableAutoMarkOnVideoEnd">
+        <input type="checkbox" id="enableAutoMarkOnVideoEnd">
+        <span>Auto-mark video as watched when playback ends</span>
+      </label>
+
+      <label class="setting" for="enablePlaylistStats">
+        <input type="checkbox" id="enablePlaylistStats">
+        <span>Calculate playlist completion stats (console)</span>
+      </label>
+
+      <label class="setting" for="enableSearchBeforeYear">
+        <input type="checkbox" id="enableSearchBeforeYear">
+        <span>Cleaner search results mode: auto-adds <code>before:YYYY</code> so YouTube shows more direct query matches and fewer recommendation/Shorts-style insertions</span>
+      </label>
+
+      <div class="actions">
+        <button id="resetDefaults" type="button">Reset Defaults</button>
+        <p id="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>
