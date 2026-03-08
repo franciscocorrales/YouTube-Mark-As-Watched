@@ -10,10 +10,12 @@ let isMarkingVideo = false;
 let playlistDebounceTimer = null;
 let lastUrl = location.href;
 
+// Returns whether a given feature flag is enabled in active settings.
 function isFeatureEnabled(key) {
   return !!settings[key];
 }
 
+// Loads persisted user settings from chrome.storage and merges with defaults.
 function loadSettings() {
   return new Promise((resolve) => {
     if (!chrome?.storage?.sync) {
@@ -34,17 +36,20 @@ function loadSettings() {
   });
 }
 
+// Removes the custom player button if present.
 function removeMarkAsWatchedButton() {
   const button = document.getElementById('mark-watched-btn');
   if (button) button.remove();
 }
 
+// Detaches the video-ended listener from the current player instance.
 function removeVideoEndListener() {
   const videoPlayer = document.querySelector('video');
   if (!videoPlayer) return;
   videoPlayer.removeEventListener('ended', handleVideoEnd);
 }
 
+// Applies current feature toggles to the page behavior.
 function applyFeatureToggles() {
   const playerFeatureEnabled = isFeatureEnabled('enableMarkAsWatchedButton') || isFeatureEnabled('enableAutoMarkOnVideoEnd');
 
@@ -70,6 +75,7 @@ function applyFeatureToggles() {
   }
 }
 
+// Waits for the player DOM to be ready and applies player-related features.
 function waitForPlayer() {
   const needsPlayer = isFeatureEnabled('enableMarkAsWatchedButton') || isFeatureEnabled('enableAutoMarkOnVideoEnd');
   if (!needsPlayer) return;
@@ -96,6 +102,7 @@ function waitForPlayer() {
   }
 }
 
+// Injects the "Mark as Watched" button into YouTube player controls.
 function addMarkAsWatchedButton() {
   if (!isFeatureEnabled('enableMarkAsWatchedButton')) return;
 
@@ -134,6 +141,7 @@ function addMarkAsWatchedButton() {
   }
 }
 
+// Seeks to the end of the video and plays briefly so YouTube records it as watched.
 function markVideoAsWatched() {
   if (isMarkingVideo) return;
 
@@ -179,6 +187,7 @@ function markVideoAsWatched() {
   }
 }
 
+// Attaches a guarded ended-event listener to auto-mark completed videos.
 function addVideoEndListener() {
   if (!isFeatureEnabled('enableAutoMarkOnVideoEnd')) return;
 
@@ -191,6 +200,7 @@ function addVideoEndListener() {
   videoPlayer.addEventListener('ended', handleVideoEnd);
 }
 
+// Handles native video end events by triggering mark-as-watched flow.
 function handleVideoEnd() {
   if (!isFeatureEnabled('enableAutoMarkOnVideoEnd')) return;
   if (!isMarkingVideo) {
@@ -198,10 +208,12 @@ function handleVideoEnd() {
   }
 }
 
+// Builds the dynamic before:YYYY token for the current year.
 function getBeforeFilter() {
   return `before:${new Date().getFullYear() + 1}`;
 }
 
+// Prefixes search input with before:YYYY when the feature is enabled.
 function maybePrefixSearchInput(searchInput) {
   if (!isFeatureEnabled('enableSearchBeforeYear')) return;
   if (!searchInput || !searchInput.value) return;
@@ -213,6 +225,7 @@ function maybePrefixSearchInput(searchInput) {
   searchInput.value = `${beforeFilter} ${originalQuery}`;
 }
 
+// Intercepts search form submit to enforce the before:YYYY prefix.
 function setupSearchFormInterception(searchForm) {
   if (!searchForm || searchForm._markWatchedSearchIntercepted) return;
   searchForm._markWatchedSearchIntercepted = true;
@@ -240,6 +253,7 @@ function setupSearchFormInterception(searchForm) {
   }, true);
 }
 
+// Intercepts Enter key in search input to enforce the before:YYYY prefix.
 function setupSearchInputInterception(searchInput) {
   if (!searchInput || searchInput._markWatchedSearchIntercepted) return;
   searchInput._markWatchedSearchIntercepted = true;
@@ -251,6 +265,7 @@ function setupSearchInputInterception(searchInput) {
   }, true);
 }
 
+// Intercepts search button clicks to enforce the before:YYYY prefix.
 function setupSearchButtonInterception(searchButton) {
   if (!searchButton || searchButton._markWatchedSearchIntercepted) return;
   searchButton._markWatchedSearchIntercepted = true;
@@ -265,6 +280,7 @@ function setupSearchButtonInterception(searchButton) {
   }, true);
 }
 
+// Finds YouTube search controls and wires all search interceptors.
 function setupSearchInterception() {
   const searchForm = document.querySelector('form[action="/results"]') ||
     document.querySelector('#search-form') ||
@@ -283,6 +299,7 @@ function setupSearchInterception() {
   if (searchButton) setupSearchButtonInterception(searchButton);
 }
 
+// Redirects search results URL when before:YYYY is missing.
 function checkAndRedirectSearch() {
   if (!isFeatureEnabled('enableSearchBeforeYear')) return false;
   if (!location.href.includes('/results?search_query=')) return false;
@@ -310,6 +327,7 @@ function checkAndRedirectSearch() {
   return false;
 }
 
+// Computes playlist completion metrics from visible playlist items.
 function calculatePlaylistStats() {
   if (!isFeatureEnabled('enablePlaylistStats')) return;
   if (!location.href.includes('/playlist?list=')) return;
@@ -364,6 +382,7 @@ function calculatePlaylistStats() {
   }
 }
 
+// Parses HH:MM:SS or MM:SS into total seconds.
 function parseTime(timeStr) {
   const parts = timeStr.split(':').map(Number);
   let seconds = 0;
@@ -377,6 +396,7 @@ function parseTime(timeStr) {
   return seconds;
 }
 
+// Formats seconds into a human-readable h/m/s string.
 function formatTime(seconds) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -384,6 +404,7 @@ function formatTime(seconds) {
   return `${h}h ${m}m ${s}s`;
 }
 
+// Debounces playlist stats calculation to avoid excessive recomputes.
 function triggerPlaylistStats() {
   if (!isFeatureEnabled('enablePlaylistStats')) return;
   if (playlistDebounceTimer) clearTimeout(playlistDebounceTimer);

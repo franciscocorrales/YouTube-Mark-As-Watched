@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
 const settingKeys = Object.keys(DEFAULT_SETTINGS);
 const statusEl = document.getElementById('status');
 
+// Shows transient feedback text in the options UI.
 function setStatus(message) {
   statusEl.textContent = message;
   clearTimeout(setStatus._timer);
@@ -16,6 +17,7 @@ function setStatus(message) {
   }, 1800);
 }
 
+// Reads checkbox values from the options form.
 function readFormState() {
   const values = {};
   settingKeys.forEach((key) => {
@@ -25,6 +27,7 @@ function readFormState() {
   return values;
 }
 
+// Applies a settings object to the options form checkboxes.
 function applyFormState(values) {
   settingKeys.forEach((key) => {
     const el = document.getElementById(key);
@@ -32,6 +35,7 @@ function applyFormState(values) {
   });
 }
 
+// Persists updated settings to chrome.storage.sync.
 function saveSettings(values) {
   chrome.storage.sync.set(values, () => {
     if (chrome.runtime.lastError) {
@@ -42,6 +46,7 @@ function saveSettings(values) {
   });
 }
 
+// Loads saved settings and initializes the options form.
 function loadSettings() {
   chrome.storage.sync.get(DEFAULT_SETTINGS, (stored) => {
     if (chrome.runtime.lastError) {
