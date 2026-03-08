@@ -2,62 +2,65 @@
 
 ## Overview
 
-This Chrome extension addresses a persistent bug in YouTube's web interface where videos don't consistently get marked as "watched" in your watch history, even after viewing them completely. While this feature works reliably on mobile and TV apps, the web version often fails to update the red progress bar to show completion status.
+This Chrome extension helps fix a common YouTube web issue where fully watched videos are not always recorded as completed.
 
 Get it from Chrome Store:
 <https://chromewebstore.google.com/detail/youtube-mark-as-watched/pccgjnpmgoibggokgmciimgoomofocbd>
 
-## The Problem
+## Features
 
-Many YouTube users, including myself, have experienced this frustrating issue:
+1. Mark as Watched button in the YouTube player controls.
+2. Auto-mark video as watched when playback reaches the end.
+3. Playlist completion stats (printed in browser console on playlist pages).
+4. Cleaner search results mode (optional): auto-adds `before:YYYY` so search pages favor direct query matches and reduce recommendation/Shorts-style insertions.
 
-1. You watch a video to completion in your web browser
-2. The red progress bar should fill completely, marking the video as watched
-3. When you return later, the progress bar is incomplete, suggesting you haven't finished the video
+## Settings (Enable/Disable Per Feature)
 
-This occurs across multiple browsers (Chrome, Firefox, Brave) and operating systems (Windows, macOS, Ubuntu), suggesting it's an issue with YouTube's web JavaScript implementation rather than a specific browser bug.
+All features can be enabled or disabled from the extension settings page.
 
-## The Solution
+1. Open `chrome://extensions/`.
+2. Find **YouTube Mark As Watched**.
+3. Click **Details**.
+4. Open **Extension options**.
 
-This extension adds a simple "Mark as Watched" button to YouTube's video player controls. When clicked, it:
+Default settings:
 
-1. Programmatically seeks to the end of the video
-2. Briefly plays the last fraction of a second
-3. Ensures YouTube's servers register the video as completely watched
-4. Provides visual feedback when successful
+1. `Add "Mark as Watched" player button`: `true`
+2. `Auto-mark video as watched when playback ends`: `true`
+3. `Calculate playlist completion stats`: `true`
+4. `Cleaner search results mode (before:YYYY)`: `false`
 
 ## Installation
 
 ### From Chrome Web Store
 
-1. Visit the extension page on the Chrome Web Store
-2. Click "Add to Chrome"
-3. Confirm the installation
+1. Visit the extension page on the Chrome Web Store.
+2. Click **Add to Chrome**.
+3. Confirm installation.
 
 ### Manual Installation
 
-1. Download or clone this repository
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" (toggle in the top-right corner)
-4. Click "Load unpacked"
-5. Select the directory containing the extension files
+1. Clone or download this repository.
+2. Open Chrome and go to `chrome://extensions/`.
+3. Enable **Developer mode**.
+4. Click **Load unpacked**.
+5. Select this project folder.
 
 ## Usage
 
-1. Navigate to any YouTube video
-2. Look for the checkmark button in the video player controls
-3. Click the button to mark the video as watched
-4. The button will briefly turn green to indicate success
+1. Open a YouTube video page.
+2. Use the checkmark button in player controls to mark as watched.
+3. Optionally enable/disable features in **Extension options**.
 
 ![element location](icons/button-location.jpg?raw=true "button location")
 
-## Technical Details
+## Technical Notes
 
-The extension works by manipulating the video element's currentTime property to seek to the end of the video and triggering playback briefly to ensure YouTube's tracking mechanisms register the view as complete.
+The extension uses a content script to interact with YouTube's player and page UI, and stores feature toggles in `chrome.storage.sync`.
 
 ## Packaging
 
-To create a release ready for the Chrome Web Store, run the following command in the project root:
+To create a zip for Chrome Web Store upload:
 
 ```bash
 zip -r YouTubeMarkAsWatched.zip . -x "*.git*"
@@ -65,20 +68,12 @@ zip -r YouTubeMarkAsWatched.zip . -x "*.git*"
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the LICENSE file for details.
+Licensed under GNU General Public License v3.0. See `LICENSE` for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions and pull requests are welcome.
 
 ## Acknowledgements
 
 - Icons created by Muhamad Ulum from Flaticon
-
-## TODO
-
-Can we add a setting, that the user can enable or not, if enabled the script should automatically detect when a video finishes reproducing, and will execute this. making sure that the video is marked as Watched.
-
-Be careful that we are not introducing a infinite loop.
-
-Be able to Mark as Watched in the home, overview and other pages.
