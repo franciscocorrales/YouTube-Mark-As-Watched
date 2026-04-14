@@ -32,6 +32,26 @@
         <span>Cleaner search results mode: auto-adds <code>before:YYYY</code> so YouTube shows more direct query matches and fewer recommendation/Shorts-style insertions</span>
       </label>
 
+      <label class="setting" for="enableHideShorts">
+        <input type="checkbox" id="enableHideShorts">
+        <span>Auto-hide Shorts sections from all pages</span>
+      </label>
+
+      <label class="setting" for="enableHideMembers">
+        <input type="checkbox" id="enableHideMembers">
+        <span>Auto-hide Members-only video cards</span>
+      </label>
+
+      <label class="setting" for="enableHideWatched">
+        <input type="checkbox" id="enableHideWatched">
+        <span>Auto-hide fully watched videos on History page as they load</span>
+      </label>
+
+      <label class="setting" for="enableCleanWatchLater">
+        <input type="checkbox" id="enableCleanWatchLater">
+        <span>Clean Watch Later URLs (removes playlist parameters so videos open cleanly)</span>
+      </label>
+
       <div class="actions">
         <button id="resetDefaults" type="button">Reset Defaults</button>
         <p id="status" aria-live="polite"></p>

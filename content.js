@@ -2,7 +2,11 @@ const DEFAULT_SETTINGS = {
   enableMarkAsWatchedButton: true,
   enableAutoMarkOnVideoEnd: true,
   enablePlaylistStats: true,
-  enableSearchBeforeYear: false
+  enableSearchBeforeYear: false,
+  enableHideShorts: true,
+  enableHideMembers: false,
+  enableHideWatched: false,
+  enableCleanWatchLater: true
 };
 
 let settings = { ...DEFAULT_SETTINGS };
@@ -10,9 +14,19 @@ let isMarkingVideo = false;
 let playlistDebounceTimer = null;
 let lastUrl = location.href;
 const PLAYLIST_STATS_PANEL_ID = 'ytmaw-playlist-stats-panel';
+const HISTORY_CONTROLS_ID = 'ytmaw-history-controls';
 const PLAYLIST_DEBUG_LOGS = true;
 let lastPlaylistStatsKey = '';
 let lastPlaylistHostMissLogAt = 0;
+
+// State for filter features
+let hiddenVideos = [];
+let hiddenShortsCount = 0;
+let hiddenMembersCount = 0;
+let isHidingWatched = false;
+let dynamicHideObserver = null;
+let contentWatcherInterval = null;
+let filtersInitialized = false;
 
 // Returns whether a given feature flag is enabled in active settings.
 function isFeatureEnabled(key) {
@@ -22,6 +36,16 @@ function isFeatureEnabled(key) {
 // Returns true when the current URL is a YouTube playlist page.
 function isPlaylistPageUrl() {
   return location.href.includes('/playlist?list=');
+}
+
+// Returns true when the current URL is the Watch Later playlist page.
+function isWatchLaterPage() {
+  return location.href.includes('playlist?list=WL') || location.href.includes('watch_later');
+}
+
+// Returns true when the current URL is the History page.
+function isHistoryPage() {
+  return location.href.includes('/feed/history');
 }
 
 // Emits playlist-specific debug logs when debugging is enabled.
@@ -556,6 +580,453 @@ function hasRelevantPlaylistMutation(mutations) {
   return false;
 }
 
+// =============================================================================
+// FILTER FEATURES
+// =============================================================================
+
+// Shows a brief notification overlay on YouTube pages.
+function showYtmawNotification(message) {
+  const existing = document.getElementById('ytmaw-notification');
+  if (existing) existing.remove();
+
+  const notification = document.createElement('div');
+  notification.id = 'ytmaw-notification';
+  notification.className = 'ytmaw-notification';
+  notification.textContent = message;
+  document.body.appendChild(notification);
+
+  setTimeout(() => notification.remove(), 3000);
+}
+
+// Cleans a Watch Later playlist URL by stripping playlist parameters.
+function cleanPlaylistUrl(url) {
+  try {
+    const urlObj = new URL(url, window.location.origin);
+    const videoId = urlObj.searchParams.get('v');
+    const timeParam = urlObj.searchParams.get('t');
+    if (videoId) {
+      let newUrl = `/watch?v=${videoId}`;
+      if (timeParam) newUrl += `&t=${timeParam}`;
+      return newUrl;
+    }
+    return url;
+  } catch (e) {
+    return url;
+  }
+}
+
+// Attaches a click listener to force navigation to the cleaned URL.
+function attachCleanClickListener(element, cleanedUrl) {
+  if (element._ytmawCleanListenerAttached) return;
+  element.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.location.href = cleanedUrl;
+  }, true);
+  element._ytmawCleanListenerAttached = true;
+}
+
+// Processes a single video link to clean its Watch Later URL.
+function processVideoLink(linkElement) {
+  if (!linkElement) return false;
+  const currentHref = linkElement.href;
+  if (currentHref.includes('list=WL')) {
+    const cleanedUrl = cleanPlaylistUrl(currentHref);
+    if (cleanedUrl !== currentHref) {
+      linkElement.href = cleanedUrl;
+      attachCleanClickListener(linkElement, cleanedUrl);
+      return true;
+    }
+  } else if (currentHref.includes('/watch?v=') && !linkElement._ytmawCleanListenerAttached) {
+    attachCleanClickListener(linkElement, currentHref);
+  }
+  return false;
+}
+
+// Cleans all Watch Later playlist URLs on the current page.
+function cleanWatchLaterUrls() {
+  if (!isFeatureEnabled('enableCleanWatchLater')) return 0;
+  if (!isWatchLaterPage()) return 0;
+
+  let cleanedCount = 0;
+  document.querySelectorAll('ytd-playlist-video-renderer').forEach(video => {
+    if (processVideoLink(video.querySelector('a#thumbnail'))) cleanedCount++;
+    if (processVideoLink(video.querySelector('a#video-title'))) cleanedCount++;
+  });
+
+  if (cleanedCount > 0) showYtmawNotification(`Cleaned ${cleanedCount} Watch Later URLs`);
+  return cleanedCount;
+}
+
+// Hides Shorts shelf and section renderers from the page.
+function hideShorts() {
+  if (!isFeatureEnabled('enableHideShorts')) return 0;
+  let hiddenCount = 0;
+
+  document.querySelectorAll('ytd-reel-shelf-renderer').forEach(shelf => {
+    if (!shelf.classList.contains('ytmaw-hide')) {
+      shelf.classList.add('ytmaw-hide');
+      hiddenCount++;
+    }
+  });
+
+  document.querySelectorAll('ytd-rich-section-renderer').forEach(section => {
+    const titleEl = section.querySelector('#title');
+    if (titleEl && titleEl.textContent.trim().toLowerCase() === 'shorts') {
+      if (!section.classList.contains('ytmaw-hide')) {
+        section.classList.add('ytmaw-hide');
+        hiddenCount++;
+      }
+    }
+  });
+
+  if (hiddenCount > 0) {
+    hiddenShortsCount += hiddenCount;
+    showYtmawNotification(`Hidden ${hiddenCount} Shorts sections`);
+  }
+  return hiddenCount;
+}
+
+// Hides Members-only video cards from the page.
+function hideMembers() {
+  if (!isFeatureEnabled('enableHideMembers')) return 0;
+  let hiddenCount = 0;
+
+  document.querySelectorAll('.yt-badge-shape__text--has-multiple-badges-in-row').forEach(badge => {
+    if (badge.textContent.trim() !== 'Members only') return;
+    const container = badge.closest('yt-lockup-view-model') ||
+                      badge.closest('ytd-video-renderer') ||
+                      badge.closest('ytd-grid-video-renderer') ||
+                      badge.closest('ytd-compact-video-renderer') ||
+                      badge.closest('ytd-rich-item-renderer') ||
+                      badge.closest('ytd-item-section-renderer');
+    if (container && !container.classList.contains('ytmaw-hide')) {
+      container.classList.add('ytmaw-hide');
+      hiddenCount++;
+    }
+  });
+
+  if (hiddenCount > 0) {
+    hiddenMembersCount += hiddenCount;
+    showYtmawNotification(`Hidden ${hiddenCount} Members only videos`);
+  }
+  return hiddenCount;
+}
+
+// Hides fully watched videos (100% progress) from the page.
+function hideWatchedVideos() {
+  hiddenVideos = [];
+  let count = 0;
+
+  if (isWatchLaterPage()) {
+    document.querySelectorAll('ytd-playlist-video-renderer').forEach(video => {
+      let isWatched = false;
+      const progress = video.querySelector('#progress');
+      if (progress) {
+        const w = progress.style.width;
+        if (w === '100%' || (w && w.includes('calc(100%'))) isWatched = true;
+      }
+      const progressBar = video.querySelector('ytd-thumbnail-overlay-resume-playback-renderer');
+      if (progressBar) {
+        const p = progressBar.querySelector('#progress');
+        if (p && p.style.width === '100%') isWatched = true;
+      }
+      if (isWatched) {
+        video.classList.add('ytmaw-hide');
+        hiddenVideos.push(video);
+        count++;
+      }
+    });
+  } else {
+    document.querySelectorAll('yt-lockup-view-model').forEach(video => {
+      const seg = video.querySelector('.ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment');
+      if (seg && seg.style.width === '100%') {
+        video.classList.add('ytmaw-hide');
+        hiddenVideos.push(video);
+        count++;
+      }
+    });
+    document.querySelectorAll('ytd-video-renderer').forEach(video => {
+      const progress = video.querySelector('#progress');
+      if (progress && progress.style.width === '100%') {
+        video.classList.add('ytmaw-hide');
+        hiddenVideos.push(video);
+        count++;
+      }
+    });
+  }
+
+  isHidingWatched = true;
+  updateHistoryControlsState();
+  if (count > 0) showYtmawNotification(`Hidden ${count} fully watched videos`);
+  return count;
+}
+
+// Shows all previously hidden watched videos.
+function showAllVideos() {
+  hiddenVideos.forEach(v => v.classList.remove('ytmaw-hide'));
+  const count = hiddenVideos.length;
+  hiddenVideos = [];
+  isHidingWatched = false;
+  updateHistoryControlsState();
+  showYtmawNotification(`Showing all videos (${count} were hidden)`);
+  return count;
+}
+
+// Hides newly loaded watched videos as they are added to the DOM.
+// Fires when setting is enabled or when user has manually triggered hide.
+function hideNewlyLoadedWatchedVideos() {
+  if (!isFeatureEnabled('enableHideWatched') && !isHidingWatched) return;
+
+  document.querySelectorAll('yt-lockup-view-model:not(.ytmaw-hide)').forEach(video => {
+    const seg = video.querySelector('.ytThumbnailOverlayProgressBarHostWatchedProgressBarSegment');
+    if (seg && seg.style.width === '100%') {
+      video.classList.add('ytmaw-hide');
+      hiddenVideos.push(video);
+    }
+  });
+}
+
+// Sets up a MutationObserver to auto-hide watched videos as they load on the History page.
+// Also hides already-loaded videos immediately.
+function setupDynamicWatchedVideoHiding() {
+  if (dynamicHideObserver) {
+    dynamicHideObserver.disconnect();
+    dynamicHideObserver = null;
+  }
+
+  const target = document.querySelector('#contents, #primary, ytd-app');
+  if (!target) return;
+
+  dynamicHideObserver = new MutationObserver((mutations) => {
+    let hasNew = false;
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if ((node.matches && node.matches('yt-lockup-view-model')) ||
+              (node.querySelector && node.querySelector('yt-lockup-view-model'))) {
+            hasNew = true;
+          }
+        }
+      });
+    });
+    if (hasNew) setTimeout(hideNewlyLoadedWatchedVideos, 300);
+  });
+
+  dynamicHideObserver.observe(target, { childList: true, subtree: true });
+
+  // Hide already-loaded watched videos when the observer is set up
+  if (isFeatureEnabled('enableHideWatched')) {
+    setTimeout(hideWatchedVideos, 600);
+  }
+}
+
+// Runs auto-hide and URL-clean features based on current settings and page.
+function handleContentChanges() {
+  if (isFeatureEnabled('enableHideShorts')) hideShorts();
+  if (isFeatureEnabled('enableHideMembers')) hideMembers();
+  if (isFeatureEnabled('enableCleanWatchLater') && isWatchLaterPage()) cleanWatchLaterUrls();
+}
+
+// Sets up periodic polling to catch content changes the observer may miss.
+function setupContentMonitoring() {
+  if (contentWatcherInterval) clearInterval(contentWatcherInterval);
+  contentWatcherInterval = setInterval(handleContentChanges, 5000);
+}
+
+// =============================================================================
+// HISTORY PAGE INLINE CONTROLS
+// =============================================================================
+
+// Creates a button styled to match YouTube's native action bar buttons.
+function createYtButton(label, id) {
+  const shape = document.createElement('yt-button-shape');
+
+  const btn = document.createElement('button');
+  btn.id = id;
+  btn.className = [
+    'yt-spec-button-shape-next',
+    'yt-spec-button-shape-next--text',
+    'yt-spec-button-shape-next--mono',
+    'yt-spec-button-shape-next--size-m',
+    'yt-spec-button-shape-next--enable-backdrop-filter-experiment'
+  ].join(' ');
+  btn.setAttribute('aria-label', label);
+  btn.style.justifyContent = 'flex-start';
+
+  const textContent = document.createElement('div');
+  textContent.className = 'yt-spec-button-shape-next__button-text-content';
+
+  const span = document.createElement('span');
+  span.className = 'ytAttributedStringHost ytAttributedStringWhiteSpaceNoWrap';
+  span.setAttribute('role', 'text');
+  span.textContent = label;
+
+  const feedback = document.createElement('yt-touch-feedback-shape');
+  feedback.setAttribute('aria-hidden', 'true');
+  feedback.innerHTML = '<div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div>';
+
+  textContent.appendChild(span);
+  btn.appendChild(textContent);
+  btn.appendChild(feedback);
+  shape.appendChild(btn);
+  return shape;
+}
+
+// Updates the active/inactive visual state of the injected history controls.
+function updateHistoryControlsState() {
+  const hideBtn = document.getElementById('ytmaw-hide-watched-btn');
+  const showBtn = document.getElementById('ytmaw-show-watched-btn');
+  if (!hideBtn || !showBtn) return;
+
+  hideBtn.disabled = isHidingWatched;
+  showBtn.disabled = !isHidingWatched;
+  hideBtn.style.opacity = isHidingWatched ? '0.45' : '';
+  showBtn.style.opacity = !isHidingWatched ? '0.45' : '';
+}
+
+// Removes the injected history controls if present.
+function removeHistoryControls() {
+  document.getElementById(HISTORY_CONTROLS_ID)?.remove();
+}
+
+// Injects Hide/Show watched buttons into the YouTube history page action bar.
+// Retries until the action bar is available.
+function injectHistoryPageButtons(retries = 15) {
+  if (!isHistoryPage()) return;
+  if (document.getElementById(HISTORY_CONTROLS_ID)) return;
+
+  const actionsContainer = document.querySelector('ytd-browse-feed-actions-renderer #contents');
+  if (!actionsContainer) {
+    if (retries > 0) setTimeout(() => injectHistoryPageButtons(retries - 1), 400);
+    return;
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.id = HISTORY_CONTROLS_ID;
+  wrapper.className = 'ytmaw-history-controls style-scope ytd-browse-feed-actions-renderer';
+
+  const hideShape = createYtButton('Hide watched', 'ytmaw-hide-watched-btn');
+  const showShape = createYtButton('Show all', 'ytmaw-show-watched-btn');
+
+  hideShape.querySelector('button').addEventListener('click', () => hideWatchedVideos());
+  showShape.querySelector('button').addEventListener('click', () => showAllVideos());
+
+  wrapper.appendChild(hideShape);
+  wrapper.appendChild(showShape);
+
+  // Insert after the search box so our buttons appear at the top of the action list.
+  // Using Element.after() avoids the HierarchyRequestError that insertBefore throws
+  // when the reference node is a descendant rather than a direct child.
+  const searchBox = actionsContainer.querySelector('ytd-search-box-renderer');
+  if (searchBox) {
+    searchBox.after(wrapper);
+  } else {
+    actionsContainer.prepend(wrapper);
+  }
+
+  updateHistoryControlsState();
+}
+
+// =============================================================================
+// NAVIGATION + OBSERVERS
+// =============================================================================
+
+// Listens for YouTube SPA navigation and re-applies filter features on URL change.
+function setupNavigationObserver() {
+  let lastNavUrl = location.href;
+  let wasHistoryPage = isHistoryPage();
+
+  setInterval(() => {
+    if (location.href === lastNavUrl) return;
+    lastNavUrl = location.href;
+
+    const nowHistory = isHistoryPage();
+
+    if (nowHistory && !wasHistoryPage) {
+      // Just navigated TO history page
+      setTimeout(() => {
+        setupDynamicWatchedVideoHiding();
+        injectHistoryPageButtons();
+      }, 800);
+    } else if (!nowHistory && wasHistoryPage) {
+      // Left history page — clean up
+      removeHistoryControls();
+    }
+
+    wasHistoryPage = nowHistory;
+
+    handleContentChanges();
+    if (isFeatureEnabled('enableCleanWatchLater') && isWatchLaterPage()) {
+      setTimeout(cleanWatchLaterUrls, 1000);
+    }
+  }, 500);
+
+  window.addEventListener('popstate', () => {
+    setTimeout(() => {
+      if (isHistoryPage()) {
+        setupDynamicWatchedVideoHiding();
+        injectHistoryPageButtons();
+      }
+      handleContentChanges();
+    }, 100);
+  });
+}
+
+// Registers a message listener to handle popup action requests.
+function setupMessageListener() {
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (!request.action || !request.action.startsWith('ytmaw_')) return false;
+
+    switch (request.action) {
+      case 'ytmaw_hideWatched': {
+        const count = hideWatchedVideos();
+        sendResponse({ success: true, hiddenCount: count });
+        return true;
+      }
+      case 'ytmaw_showAll': {
+        const count = showAllVideos();
+        sendResponse({ success: true, shownCount: count });
+        return true;
+      }
+      case 'ytmaw_hideShorts': {
+        const count = hideShorts();
+        sendResponse({ success: true, hiddenCount: count });
+        return true;
+      }
+      case 'ytmaw_hideMembers': {
+        const count = hideMembers();
+        sendResponse({ success: true, hiddenCount: count });
+        return true;
+      }
+      case 'ytmaw_cleanUrls': {
+        const count = cleanWatchLaterUrls();
+        sendResponse({ success: true, cleanedCount: count });
+        return true;
+      }
+      case 'ytmaw_getStats': {
+        sendResponse({
+          success: true,
+          stats: {
+            hiddenVideos: hiddenVideos.length,
+            hiddenShorts: hiddenShortsCount,
+            hiddenMembers: hiddenMembersCount,
+            isHidingWatched,
+            isWatchLater: isWatchLaterPage()
+          }
+        });
+        return true;
+      }
+      default:
+        return false;
+    }
+  });
+}
+
+// =============================================================================
+// MUTATION OBSERVER + NAVIGATION EVENTS
+// =============================================================================
+
 // Watches YouTube DOM mutations to keep injected UI/features in sync.
 const observer = new MutationObserver((mutations) => {
   const currentUrl = location.href;
@@ -618,6 +1089,20 @@ document.addEventListener('yt-navigate-finish', () => {
     logPlaylistDebug('yt-navigate-finish on playlist page, refreshing stats');
     triggerPlaylistStats();
   }
+
+  handleContentChanges();
+  if (isFeatureEnabled('enableCleanWatchLater') && isWatchLaterPage()) {
+    setTimeout(cleanWatchLaterUrls, 1000);
+  }
+
+  if (isHistoryPage()) {
+    setTimeout(() => {
+      setupDynamicWatchedVideoHiding();
+      injectHistoryPageButtons();
+    }, 800);
+  } else {
+    removeHistoryControls();
+  }
 });
 
 // Applies live setting changes pushed from the options page.
@@ -641,4 +1126,21 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 (async function init() {
   await loadSettings();
   applyFeatureToggles();
+
+  if (!filtersInitialized) {
+    filtersInitialized = true;
+
+    setTimeout(() => {
+      handleContentChanges();
+      if (isFeatureEnabled('enableCleanWatchLater') && isWatchLaterPage()) cleanWatchLaterUrls();
+      if (isHistoryPage()) {
+        setupDynamicWatchedVideoHiding();
+        injectHistoryPageButtons();
+      }
+    }, 1500);
+
+    setupContentMonitoring();
+    setupNavigationObserver();
+    setupMessageListener();
+  }
 })();

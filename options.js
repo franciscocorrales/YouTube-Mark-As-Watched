@@ -2,7 +2,11 @@ const DEFAULT_SETTINGS = {
   enableMarkAsWatchedButton: true,
   enableAutoMarkOnVideoEnd: true,
   enablePlaylistStats: true,
-  enableSearchBeforeYear: false
+  enableSearchBeforeYear: false,
+  enableHideShorts: true,
+  enableHideMembers: false,
+  enableHideWatched: false,
+  enableCleanWatchLater: true
 };
 
 const settingKeys = Object.keys(DEFAULT_SETTINGS);

@@ -91,5 +91,38 @@
       grid-template-columns: 1fr;
     }
   }
-  
-  
+
+/* Inline Hide/Show controls injected into the history page action bar */
+.ytmaw-history-controls {
+  display: block;
+  width: 100%;
+}
+
+/* Hides filtered elements (Shorts, Members-only, watched videos) */
+.ytmaw-hide {
+  display: none !important;
+}
+
+/* Notification overlay for filter actions */
+.ytmaw-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 999999;
+  background: linear-gradient(145deg, #ff0000, #cc0000);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: ytmaw-fadein 0.2s ease;
+}
+
+@keyframes ytmaw-fadein {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+

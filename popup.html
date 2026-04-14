@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YouTube Mark As Watched</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <h1>YouTube Mark As Watched</h1>
+
+    <section class="group">
+      <p class="group-label">Watched videos</p>
+      <button id="hideWatched">Hide 100% watched videos</button>
+      <button id="showAll">Show all hidden videos</button>
+    </section>
+
+    <section class="group">
+      <p class="group-label">Content filters</p>
+      <button id="hideShorts">Hide Shorts sections</button>
+      <button id="hideMembers">Hide Members-only videos</button>
+      <button id="cleanUrls">Clean Watch Later URLs</button>
+    </section>
+
+    <section class="group footer-group">
+      <button id="openOptions" class="secondary">Settings</button>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
