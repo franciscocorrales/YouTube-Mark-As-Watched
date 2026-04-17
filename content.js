@@ -15,7 +15,7 @@ let playlistDebounceTimer = null;
 let lastUrl = location.href;
 const PLAYLIST_STATS_PANEL_ID = 'ytmaw-playlist-stats-panel';
 const HISTORY_CONTROLS_ID = 'ytmaw-history-controls';
-const PLAYLIST_DEBUG_LOGS = true;
+const PLAYLIST_DEBUG_LOGS = false;
 let lastPlaylistStatsKey = '';
 let lastPlaylistHostMissLogAt = 0;
 
@@ -468,35 +468,22 @@ function triggerPlaylistStats() {
   playlistDebounceTimer = setTimeout(updatePlaylistStatsUI, 2000);
 }
 
-// Finds the best host element inside the playlist header for the custom stats panel.
-function findPlaylistStatsHost() {
+// Returns the element before which the stats panel should be inserted.
+// Anchoring off the video list guarantees we land in a visible container.
+function findPlaylistStatsAnchor() {
+  const videoList = document.querySelector('ytd-playlist-video-list-renderer');
+  if (videoList) return videoList;
+
+  // Legacy layout fallback
   const legacyHeader = document.querySelector('ytd-playlist-header-renderer');
-  if (legacyHeader) {
-    const legacyHost = legacyHeader.querySelector('.metadata-text-wrapper') ||
-      legacyHeader.querySelector('.metadata-wrapper') ||
-      legacyHeader.querySelector('.immersive-header-content');
-    if (legacyHost) return legacyHost;
-  }
+  if (legacyHeader) return legacyHeader;
 
-  const modernHeader = document.querySelector('yt-page-header-renderer, yt-page-header-view-model');
-  if (modernHeader) {
-    const modernHost = modernHeader.querySelector('.yt-page-header-view-model__page-header-headline-info') ||
-      modernHeader.querySelector('.yt-page-header-view-model__page-header-headline') ||
-      modernHeader.querySelector('.yt-page-header-view-model__page-header-content') ||
-      modernHeader.querySelector('.yt-page-header-view-model__scroll-container');
-    if (modernHost) return modernHost;
-    return modernHeader;
+  const now = Date.now();
+  if (now - lastPlaylistHostMissLogAt > 5000) {
+    logPlaylistDebug('Could not find playlist stats anchor');
+    lastPlaylistHostMissLogAt = now;
   }
-
-  const fallbackHost = document.querySelector('ytd-browse #primary') || null;
-  if (!fallbackHost) {
-    const now = Date.now();
-    if (now - lastPlaylistHostMissLogAt > 5000) {
-      logPlaylistDebug('Could not find a playlist header host (legacy + modern selectors missed)');
-      lastPlaylistHostMissLogAt = now;
-    }
-  }
-  return fallbackHost;
+  return null;
 }
 
 // Removes the custom playlist stats panel if it exists.
@@ -513,25 +500,28 @@ function buildPlaylistStatsKey(stats) {
 
 // Renders or updates the playlist stats panel in the playlist header UI.
 function renderPlaylistStatsPanel(stats) {
-  const host = findPlaylistStatsHost();
-  if (!host) return;
+  const anchor = findPlaylistStatsAnchor();
+  if (!anchor) return;
 
   let panel = document.getElementById(PLAYLIST_STATS_PANEL_ID);
   if (!panel) {
     panel = document.createElement('div');
     panel.id = PLAYLIST_STATS_PANEL_ID;
     panel.className = 'ytmaw-playlist-stats';
+    anchor.insertAdjacentElement('beforebegin', panel);
   }
-  if (panel.parentElement !== host) host.appendChild(panel);
 
-  const completionText = `${stats.totalWatchedPercentage.toFixed(1)}%`;
+  const completionPct = stats.totalWatchedPercentage.toFixed(1);
   panel.innerHTML = `
-    <div class="ytmaw-playlist-stats-title">Playlist Summary</div>
+    <div class="ytmaw-playlist-stats-title">Watch Progress</div>
+    <div class="ytmaw-playlist-stats-progress-bar">
+      <div class="ytmaw-playlist-stats-progress-fill" style="width: ${completionPct}%"></div>
+    </div>
     <div class="ytmaw-playlist-stats-grid">
-      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Videos</span><span class="ytmaw-value">${stats.fullyWatchedVideos}/${stats.totalVideos}</span></div>
-      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Completion</span><span class="ytmaw-value">${completionText}</span></div>
-      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Watched</span><span class="ytmaw-value">${formatTime(stats.watchedDurationSec)}</span></div>
-      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Total</span><span class="ytmaw-value">${formatTime(stats.totalDurationSec)}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Videos watched</span><span class="ytmaw-value">${stats.fullyWatchedVideos}/${stats.totalVideos}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Completion</span><span class="ytmaw-value">${completionPct}%</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Watched time</span><span class="ytmaw-value">${formatTime(stats.watchedDurationSec)}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Total time</span><span class="ytmaw-value">${formatTime(stats.totalDurationSec)}</span></div>
     </div>
   `;
 }
@@ -557,12 +547,8 @@ function updatePlaylistStatsUI() {
   const statsKey = buildPlaylistStatsKey(stats);
   if (statsKey !== lastPlaylistStatsKey) {
     lastPlaylistStatsKey = statsKey;
-    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${stats.totalVideos}\n    - Fully Watched: ${stats.fullyWatchedVideos}/${stats.totalVideos}\n    - Total Duration: ${formatTime(stats.totalDurationSec)}\n    - Watched Duration: ${formatTime(stats.watchedDurationSec)}\n    - Playlist Completion: ${stats.totalWatchedPercentage.toFixed(1)}%`);
-  } else {
-    logPlaylistDebug('Stats unchanged, skipping duplicate console summary');
+    renderPlaylistStatsPanel(stats);
   }
-
-  renderPlaylistStatsPanel(stats);
 }
 
 // Checks whether the latest DOM mutations are relevant to playlist stats updates.
