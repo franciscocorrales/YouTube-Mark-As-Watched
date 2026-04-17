@@ -385,6 +385,7 @@ function calculatePlaylistStats() {
   let totalVideos = 0;
   let totalDurationSec = 0;
   let watchedDurationSec = 0;
+  let fullyWatchedVideos = 0;
 
   videoItems.forEach((item) => {
     let timeText = '';
@@ -406,20 +407,21 @@ function calculatePlaylistStats() {
 
     let percentage = 0;
 
-    const overlay = item.querySelector('ytd-thumbnail-overlay-playback-status-renderer yt-formatted-string');
-    if (overlay && overlay.textContent.trim() === 'WATCHED') {
-      percentage = 1;
+    const progress = item.querySelector('ytd-thumbnail-overlay-resume-playback-renderer #progress');
+    if (progress && progress.style.width) {
+      const widthVal = parseFloat(progress.style.width);
+      if (!isNaN(widthVal)) {
+        percentage = widthVal / 100;
+      }
     } else {
-      const progress = item.querySelector('ytd-thumbnail-overlay-resume-playback-renderer #progress');
-      if (progress && progress.style.width) {
-        const widthVal = parseFloat(progress.style.width);
-        if (!isNaN(widthVal)) {
-          percentage = widthVal / 100;
-        }
+      const overlay = item.querySelector('ytd-thumbnail-overlay-playback-status-renderer yt-formatted-string');
+      if (overlay && overlay.textContent.trim() === 'WATCHED') {
+        percentage = 1;
       }
     }
 
     watchedDurationSec += duration * percentage;
+    if (percentage === 1) fullyWatchedVideos++;
   });
 
   if (totalVideos === 0) return null;
@@ -427,6 +429,7 @@ function calculatePlaylistStats() {
   const totalWatchedPercentage = totalDurationSec > 0 ? (watchedDurationSec / totalDurationSec) * 100 : 0;
   const stats = {
     totalVideos: totalVideos,
+    fullyWatchedVideos: fullyWatchedVideos,
     totalDurationSec: totalDurationSec,
     watchedDurationSec: watchedDurationSec,
     totalWatchedPercentage: totalWatchedPercentage
@@ -505,7 +508,7 @@ function removePlaylistStatsPanel() {
 
 // Produces a compact fingerprint so unchanged stats are not repeatedly logged.
 function buildPlaylistStatsKey(stats) {
-  return `${stats.totalVideos}|${stats.totalDurationSec}|${Math.round(stats.watchedDurationSec)}|${stats.totalWatchedPercentage.toFixed(2)}`;
+  return `${stats.totalVideos}|${stats.fullyWatchedVideos}|${stats.totalDurationSec}|${Math.round(stats.watchedDurationSec)}|${stats.totalWatchedPercentage.toFixed(2)}`;
 }
 
 // Renders or updates the playlist stats panel in the playlist header UI.
@@ -525,7 +528,7 @@ function renderPlaylistStatsPanel(stats) {
   panel.innerHTML = `
     <div class="ytmaw-playlist-stats-title">Playlist Summary</div>
     <div class="ytmaw-playlist-stats-grid">
-      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Videos</span><span class="ytmaw-value">${stats.totalVideos}</span></div>
+      <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Videos</span><span class="ytmaw-value">${stats.fullyWatchedVideos}/${stats.totalVideos}</span></div>
       <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Completion</span><span class="ytmaw-value">${completionText}</span></div>
       <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Watched</span><span class="ytmaw-value">${formatTime(stats.watchedDurationSec)}</span></div>
       <div class="ytmaw-playlist-stat"><span class="ytmaw-label">Total</span><span class="ytmaw-value">${formatTime(stats.totalDurationSec)}</span></div>
@@ -554,7 +557,7 @@ function updatePlaylistStatsUI() {
   const statsKey = buildPlaylistStatsKey(stats);
   if (statsKey !== lastPlaylistStatsKey) {
     lastPlaylistStatsKey = statsKey;
-    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${stats.totalVideos}\n    - Total Duration: ${formatTime(stats.totalDurationSec)}\n    - Watched Duration: ${formatTime(stats.watchedDurationSec)}\n    - Playlist Completion: ${stats.totalWatchedPercentage.toFixed(1)}%`);
+    console.log(`[YouTube Mark As Watched] Playlist Stats:\n    - Videos: ${stats.totalVideos}\n    - Fully Watched: ${stats.fullyWatchedVideos}/${stats.totalVideos}\n    - Total Duration: ${formatTime(stats.totalDurationSec)}\n    - Watched Duration: ${formatTime(stats.watchedDurationSec)}\n    - Playlist Completion: ${stats.totalWatchedPercentage.toFixed(1)}%`);
   } else {
     logPlaylistDebug('Stats unchanged, skipping duplicate console summary');
   }
