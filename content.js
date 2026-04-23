@@ -834,17 +834,17 @@ function createYtButton(label, id) {
   const btn = document.createElement('button');
   btn.id = id;
   btn.className = [
-    'yt-spec-button-shape-next',
-    'yt-spec-button-shape-next--text',
-    'yt-spec-button-shape-next--mono',
-    'yt-spec-button-shape-next--size-m',
-    'yt-spec-button-shape-next--enable-backdrop-filter-experiment'
+    'ytSpecButtonShapeNextHost',
+    'ytSpecButtonShapeNextText',
+    'ytSpecButtonShapeNextMono',
+    'ytSpecButtonShapeNextSizeM',
+    'ytSpecButtonShapeNextEnableBackdropFilterExperiment'
   ].join(' ');
   btn.setAttribute('aria-label', label);
   btn.style.justifyContent = 'flex-start';
 
   const textContent = document.createElement('div');
-  textContent.className = 'yt-spec-button-shape-next__button-text-content';
+  textContent.className = 'ytSpecButtonShapeNextButtonTextContent';
 
   const span = document.createElement('span');
   span.className = 'ytAttributedStringHost ytAttributedStringWhiteSpaceNoWrap';
@@ -853,6 +853,7 @@ function createYtButton(label, id) {
 
   const feedback = document.createElement('yt-touch-feedback-shape');
   feedback.setAttribute('aria-hidden', 'true');
+  feedback.className = 'ytSpecTouchFeedbackShapeHost ytSpecTouchFeedbackShapeTouchResponse';
   feedback.innerHTML = '<div class="ytSpecTouchFeedbackShapeStroke"></div><div class="ytSpecTouchFeedbackShapeFill"></div>';
 
   textContent.appendChild(span);
