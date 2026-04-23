@@ -60,11 +60,15 @@ The extension uses a content script to interact with YouTube's player and page U
 
 ## Packaging
 
-To create a zip for Chrome Web Store upload:
+1. Create the zip (run from the project root):
 
-```bash
-zip -r YouTubeMarkAsWatched.zip . -x "*.git*"
-```
+   ```bash
+   zip -r YouTubeMarkAsWatched.zip . -x "*.git*"
+   ```
+
+2. Go to the [Chrome Web Store Developer Console](https://chrome.google.com/webstore/devconsole/).
+3. Select the extension, click **Package** → **Upload new package**, and upload the zip.
+4. Click **Submit for review**.
 
 ## License
 
